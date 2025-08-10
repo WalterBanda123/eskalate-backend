@@ -1,23 +1,24 @@
 const mongoose = require('mongoose');
 const { StatusCodes, ReasonPhrases } = require('http-status-codes');
-const Meal = require('../../models/meal').Meal;
+const { Meal, validateMeal } = require('../../models/meal');
+const { Restaurant, validateRestaurant } = require('../../models/restaurant');
 const Joi = require('joi');
 
 const getMeals = async (request, response) => {
     const schema = Joi.object({
-        page: Joi.string().required(),
-        limit: Joi.string().required(),
-        search: Joi.string().optional(),
+        page: Joi.string().default('1'),
+        limit: Joi.string().default('8'),
+        search: Joi.string().optional().allow('').default(''),
     });
 
     try {
-        const { page, limit, search } = await schema.validateAsync(request.params);
+        const { page, limit, search } = await schema.validateAsync(request.query);
 
         const pipeline = [];
 
-        if (search) {
+        if (search && search.trim() !== '') {
             const regex = new RegExp(search, 'i');
-            pipeline.push({ $match: { name: regex } });
+            pipeline.push({ $match: { foodName: regex } });
         }
 
         pipeline.push(
@@ -32,10 +33,9 @@ const getMeals = async (request, response) => {
             { $unwind: '$restaurant' },
             {
                 $project: {
-                    name: 1,
-                    description: 1,
-                    price: 1,
-                    image: 1,
+                    foodName: 1,
+                    rating: 1,
+                    imageUrl: 1,
                     'restaurant.name': 1,
                     'restaurant.logo': 1,
                     'restaurant.status': 1
@@ -53,29 +53,68 @@ const getMeals = async (request, response) => {
             },
         });
     } catch (error) {
-        response.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ error: 'Internal Server Error', message: ReasonPhrases.INTERNAL_SERVER_ERROR });
+        console.log(error)
+        return response.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ error: 'Internal Server Error', message: ReasonPhrases.INTERNAL_SERVER_ERROR });
     }
 }
 
 
 const addMeal = async (request, response) => {
-    const schema = Joi.object({
-        name: Joi.string().min(2).max(100).required(),
-        description: Joi.string().min(5).max(500).required(),
-        price: Joi.number().min(0).required(),
-        image: Joi.string().uri().required(),
-    });
-
     try {
-        const { name, description, price, image } = await schema.validateAsync(request.body);
-        const meal = new Meal({ _id: new mongoose.Schema.Types.ObjectId(), name, description, price, image });
+        const mealSchema = Joi.object({
+            foodName: Joi.string().required(),
+            rating: Joi.number().min(0).max(5).required(),
+            imageUrl: Joi.string().required(),
+            restaurant: Joi.object({
+                name: Joi.string().required(),
+                logo: Joi.string().required(),
+                status: Joi.string().valid('close', 'open').default('open')
+            }).required()
+        });
+
+        const { error } = mealSchema.validate(request.body);
+        if (error) {
+            return response.status(StatusCodes.BAD_REQUEST).json({
+                error: 'Validation Error',
+                message: error.details[0].message
+            });
+        }
+
+        const { foodName, rating, imageUrl, restaurant: restaurantData } = request.body;
+
+        // Create the restaurant first
+        const restaurant = new Restaurant({
+            _id: new mongoose.Types.ObjectId(),
+            name: restaurantData.name,
+            logo: restaurantData.logo,
+            status: restaurantData.status || 'open'
+        });
+
+        await restaurant.save();
+
+        // Create the meal with the restaurant ID
+        const meal = new Meal({
+            _id: new mongoose.Types.ObjectId(),
+            foodName,
+            rating,
+            imageUrl,
+            restaurant: restaurant._id
+        });
+
         await meal.save();
+
         response.status(StatusCodes.CREATED).json({
             message: ReasonPhrases.CREATED,
-            data: meal,
+            data: {
+                meal,
+                restaurant
+            },
         });
     } catch (error) {
-        response.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ error: 'Internal Server Error', message: ReasonPhrases.INTERNAL_SERVER_ERROR });
+        response.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+            error: 'Internal Server Error',
+            message: ReasonPhrases.INTERNAL_SERVER_ERROR
+        });
     }
 }
 
@@ -126,3 +165,10 @@ const deleteMeal = async (request, response) => {
         response.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ error: 'Internal Server Error', message: ReasonPhrases.INTERNAL_SERVER_ERROR });
     }
 }
+
+module.exports = {
+    getMeals,
+    addMeal,
+    updateMeal,
+    deleteMeal,
+};

@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const {} = require('../../controllers/meals/index.js');
-
+const { getMeals, addMeal, updateMeal, deleteMeal } = require('../../controllers/meals/index.js');
 
 router.get('/', getMeals);
 router.post('/', addMeal);
