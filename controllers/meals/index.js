@@ -58,6 +58,49 @@ const getMeals = async (request, response) => {
     }
 }
 
+const getMealById = async (request, response) => {
+    const schema = Joi.object({
+        id: Joi.string().length(24).hex().required(),
+    });
+
+    try {
+        const { id } = await schema.validateAsync(request.params);
+
+        // Check if the ID is valid MongoDB ObjectId format
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return response.status(StatusCodes.BAD_REQUEST).json({
+                error: 'Invalid ID format',
+                message: 'The provided ID is not a valid MongoDB ObjectId'
+            });
+        }
+
+        const meal = await Meal.findById(id).populate('restaurant');
+        if (!meal) {
+            return response.status(StatusCodes.NOT_FOUND).json({
+                error: 'Meal not found',
+                message: ReasonPhrases.NOT_FOUND
+            });
+        }
+
+        response.status(StatusCodes.OK).json({
+            message: ReasonPhrases.OK,
+            data: meal,
+        });
+    } catch (error) {
+        console.log(error);
+        if (error.isJoi) {
+            return response.status(StatusCodes.BAD_REQUEST).json({
+                error: 'Validation Error',
+                message: error.details[0].message
+            });
+        }
+        return response.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+            error: 'Internal Server Error',
+            message: ReasonPhrases.INTERNAL_SERVER_ERROR
+        });
+    }
+}
+
 
 const addMeal = async (request, response) => {
     try {
@@ -120,11 +163,19 @@ const addMeal = async (request, response) => {
 
 const updateMeal = async (request, response) => {
     const schema = Joi.object({
-        id: Joi.string().required(),
+        id: Joi.string().length(24).hex().required(),
     });
 
     try {
         const { id } = await schema.validateAsync(request.params);
+
+        // Check if the ID is valid MongoDB ObjectId format
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return response.status(StatusCodes.BAD_REQUEST).json({
+                error: 'Invalid ID format',
+                message: 'The provided ID is not a valid MongoDB ObjectId'
+            });
+        }
 
         const updateFields = {};
         for (const key in request.body) {
@@ -132,7 +183,7 @@ const updateMeal = async (request, response) => {
                 updateFields[key] = request.body[key];
             }
         }
-        const meal = await Meal.findByIdAndUpdate(id, updateFields, { new: true });
+        const meal = await Meal.findByIdAndUpdate(id, updateFields, { new: true }).populate('restaurant');
         if (!meal) {
             return response.status(StatusCodes.NOT_FOUND).json({ error: 'Meal not found', message: ReasonPhrases.NOT_FOUND });
         }
@@ -141,17 +192,31 @@ const updateMeal = async (request, response) => {
             data: meal,
         });
     } catch (error) {
+        if (error.isJoi) {
+            return response.status(StatusCodes.BAD_REQUEST).json({
+                error: 'Validation Error',
+                message: error.details[0].message
+            });
+        }
         response.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ error: 'Internal Server Error', message: ReasonPhrases.INTERNAL_SERVER_ERROR });
     }
 }
 
 const deleteMeal = async (request, response) => {
     const schema = Joi.object({
-        id: Joi.string().required(),
+        id: Joi.string().length(24).hex().required(),
     });
 
     try {
         const { id } = await schema.validateAsync(request.params);
+
+        // Check if the ID is valid MongoDB ObjectId format
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return response.status(StatusCodes.BAD_REQUEST).json({
+                error: 'Invalid ID format',
+                message: 'The provided ID is not a valid MongoDB ObjectId'
+            });
+        }
 
         const meal = await Meal.findByIdAndDelete(id);
         if (!meal) {
@@ -162,12 +227,19 @@ const deleteMeal = async (request, response) => {
             data: meal,
         });
     } catch (error) {
+        if (error.isJoi) {
+            return response.status(StatusCodes.BAD_REQUEST).json({
+                error: 'Validation Error',
+                message: error.details[0].message
+            });
+        }
         response.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ error: 'Internal Server Error', message: ReasonPhrases.INTERNAL_SERVER_ERROR });
     }
 }
 
 module.exports = {
     getMeals,
+    getMealById,
     addMeal,
     updateMeal,
     deleteMeal,
